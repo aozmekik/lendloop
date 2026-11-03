@@ -1,0 +1,54 @@
+{
+  "name": "LendLoop — Request notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-notify",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "3d1a2c3e-7f0a-4b1e-9a2c-0f1e2d3c4b5a",
+      "name": "Convex webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-400, 300],
+      "webhookId": "lendloop-notify"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify the HMAC-SHA256 signature Convex put on the envelope,\n// then reject stale payloads (replay protection).\nconst crypto = require('crypto');\n\nconst secret = $env.LENDLOOP_WEBHOOK_SECRET;\nif (!secret) throw new Error('LENDLOOP_WEBHOOK_SECRET is not set');\n\nconst envelope = $input.first().json;\nconst { body, signature } = envelope;\nif (typeof body !== 'string' || typeof signature !== 'string') {\n  throw new Error('Malformed payload');\n}\n\nconst expected = crypto.createHmac('sha256', secret).update(body).digest('hex');\nconst a = Buffer.from(signature, 'utf8');\nconst b = Buffer.from(expected, 'utf8');\nif (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {\n  throw new Error('Invalid signature');\n}\n\nconst data = JSON.parse(body);\nif (typeof data.timestamp !== 'number' || Math.abs(Date.now() - data.timestamp) > 5 * 60 * 1000) {\n  throw new Error('Stale payload');\n}\nreturn [{ json: data }];"
+      },
+      "id": "4e2b3d4f-8a1b-4c2f-ab3d-1a2f3e4d5c6b",
+      "name": "Verify HMAC",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-180, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mock delivery: logs the notification so it is visible in the\n// execution output. Swap this node for Send Email / Slack / Discord\n// using only `recipientEmail` — the payload intentionally carries\n// nothing else identifying.\nconst d = $input.first().json;\nconst subject = d.event === 'request_created'\n  ? `New borrow request for \"${d.toolName}\"`\n  : `Your borrow request for \"${d.toolName}\" was ${d.status}`;\nconst message = `${subject} (${d.startDate} → ${d.endDate}), from/to ${d.counterpartName}.`;\nconsole.log(`[lendloop] to=${d.recipientEmail} :: ${message}`);\nreturn [{ json: { delivered: true, channel: 'mock-log', to: d.recipientEmail, subject, message } }];"
+      },
+      "id": "5f3c4e5a-9b2c-4d3a-bc4e-2b3a4f5e6d7c",
+      "name": "Send notification (mock)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [60, 300]
+    }
+  ],
+  "connections": {
+    "Convex webhook": {
+      "main": [[{ "node": "Verify HMAC", "type": "main", "index": 0 }]]
+    },
+    "Verify HMAC": {
+      "main": [[{ "node": "Send notification (mock)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "timezone": "UTC"
+  },
+  "staticData": null,
+  "pinData": {}
+}

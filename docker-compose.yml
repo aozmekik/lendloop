@@ -1,0 +1,25 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PROTOCOL=http
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      # Secrets are injected from the environment (see n8n/.env.example),
+      # never stored in the exported workflow JSON.
+      - LENDLOOP_WEBHOOK_SECRET=${LENDLOOP_WEBHOOK_SECRET}
+      - CONVEX_SITE_URL=${CONVEX_SITE_URL}
+      # Allow the `crypto` builtin inside Code nodes (used for HMAC).
+      - NODE_FUNCTION_ALLOW_BUILTIN=crypto
+      # Public base URL for webhooks. For Convex (cloud) to reach this
+      # container, point a tunnel (e.g. ngrok) here and set WEBHOOK_URL to
+      # the tunnel address.
+      - WEBHOOK_URL=${N8N_WEBHOOK_PUBLIC_URL:-http://localhost:5678/}
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:
